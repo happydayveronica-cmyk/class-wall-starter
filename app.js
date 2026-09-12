@@ -487,60 +487,169 @@ input.focus();
 
 
 // ===================================================
-// 담벼락 하단 번개 반응 게임
+// 담벼락 하단 분필 피하기 게임
 // ===================================================
 
-const reactionBoard = document.getElementById("reactionBoard");
-const gameMainText = document.getElementById("gameMainText");
-const gameSubText = document.getElementById("gameSubText");
+const gameCanvas = document.getElementById("chalkGame");
+const gameContext = gameCanvas.getContext("2d");
+const gameOverlay = document.getElementById("gameOverlay");
+const gameStartButton = document.getElementById("gameStartButton");
+const gameMessageTitle = document.getElementById("gameMessageTitle");
+const gameMessageText = document.getElementById("gameMessageText");
+const currentScore = document.getElementById("currentScore");
 const bestScore = document.getElementById("bestScore");
+const moveLeftButton = document.getElementById("moveLeft");
+const moveRightButton = document.getElementById("moveRight");
+const rabbitImage = new Image();
+rabbitImage.src = "assets/rabbit-player.png";
 
-let gameState = "idle";
-let reactionTimer = null;
-let readyAt = 0;
-let fastestTime = null;
+const gameKeys = { left: false, right: false };
+const rabbit = { x: 382, y: 310, width: 76, height: 96, speed: 380 };
+let chalks = [];
+let gameRunning = false;
+let gameAnimation = null;
+let lastFrameTime = 0;
+let chalkTimer = 0;
+let gameScore = 0;
+let highScore = 0;
 
-// 게임판의 안내 문구와 색을 현재 상태에 맞게 바꿉니다.
-function updateGameBoard(state, mainText, subText) {
-  gameState = state;
-  reactionBoard.className = "reaction-board" + (state === "idle" ? "" : " " + state);
-  gameMainText.textContent = mainText;
-  gameSubText.textContent = subText;
-}
+// 게임판의 칠판 배경과 토끼를 그립니다.
+function drawGame() {
+  gameContext.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+  gameContext.fillStyle = "#174a3a";
+  gameContext.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
 
-// 누르는 시간을 예상하기 어렵도록 1.5초에서 4초 사이에 시작합니다.
-function startReactionGame() {
-  clearTimeout(reactionTimer);
-  updateGameBoard("waiting", "기다리세요…", "초록색이 되기 전에 누르면 다시 시작해야 해요.");
+  gameContext.strokeStyle = "rgba(255, 255, 255, 0.07)";
+  gameContext.lineWidth = 2;
+  for (let x = 140; x < gameCanvas.width; x += 140) {
+    gameContext.beginPath();
+    gameContext.moveTo(x, 0);
+    gameContext.lineTo(x, gameCanvas.height);
+    gameContext.stroke();
+  }
 
-  const delay = 1500 + Math.random() * 2500;
-  reactionTimer = setTimeout(function () {
-    readyAt = performance.now();
-    updateGameBoard("ready", "지금 누르세요!", "번개처럼 빠르게!");
-  }, delay);
-}
-
-if (reactionBoard) {
-  reactionBoard.addEventListener("click", function () {
-    if (gameState === "idle" || gameState === "result") {
-      startReactionGame();
-      return;
-    }
-
-    if (gameState === "waiting") {
-      clearTimeout(reactionTimer);
-      updateGameBoard("result", "조금 빨랐어요!", "초록색으로 바뀐 뒤 눌러 주세요. 다시 누르면 시작해요.");
-      return;
-    }
-
-    if (gameState === "ready") {
-      const reactionTime = Math.round(performance.now() - readyAt);
-      if (fastestTime === null || reactionTime < fastestTime) {
-        fastestTime = reactionTime;
-        bestScore.textContent = "최고 기록: " + fastestTime + "ms";
-      }
-
-      updateGameBoard("result", reactionTime + "ms!", "멋진 반응이에요. 다시 누르면 한 번 더 도전할 수 있어요.");
-    }
+  chalks.forEach(function (chalk) {
+    gameContext.save();
+    gameContext.translate(chalk.x + chalk.width / 2, chalk.y + chalk.height / 2);
+    gameContext.rotate(chalk.angle);
+    gameContext.fillStyle = chalk.color;
+    gameContext.shadowColor = "rgba(0, 0, 0, 0.25)";
+    gameContext.shadowBlur = 5;
+    gameContext.fillRect(-chalk.width / 2, -chalk.height / 2, chalk.width, chalk.height);
+    gameContext.restore();
   });
+
+  if (rabbitImage.complete) {
+    gameContext.drawImage(rabbitImage, rabbit.x, rabbit.y, rabbit.width, rabbit.height);
+  }
+}
+
+// 분필과 토끼가 닿았는지 여유 있게 확인합니다.
+function isChalkHit(chalk) {
+  const padding = 12;
+  return chalk.x < rabbit.x + rabbit.width - padding &&
+    chalk.x + chalk.width > rabbit.x + padding &&
+    chalk.y < rabbit.y + rabbit.height - padding &&
+    chalk.y + chalk.height > rabbit.y + padding;
+}
+
+function finishChalkGame() {
+  gameRunning = false;
+  cancelAnimationFrame(gameAnimation);
+  highScore = Math.max(highScore, Math.floor(gameScore));
+  bestScore.textContent = "최고 " + highScore;
+  gameMessageTitle.textContent = "분필에 맞았어요!";
+  gameMessageText.textContent = "이번 점수는 " + Math.floor(gameScore) + "점이에요. 다시 도전해 보세요.";
+  gameStartButton.textContent = "다시 하기";
+  gameOverlay.hidden = false;
+}
+
+function addFallingChalk() {
+  const colors = ["#ffffff", "#ffd43b", "#74c0fc", "#ffa8a8"];
+  chalks.push({
+    x: Math.random() * (gameCanvas.width - 42),
+    y: -40,
+    width: 14,
+    height: 38,
+    speed: 190 + Math.min(gameScore * 2, 190) + Math.random() * 70,
+    angle: (Math.random() - 0.5) * 0.8,
+    color: colors[Math.floor(Math.random() * colors.length)]
+  });
+}
+
+// 매 화면마다 토끼와 분필의 위치를 계산합니다.
+function updateChalkGame(time) {
+  if (!gameRunning) return;
+  const delta = Math.min((time - lastFrameTime) / 1000, 0.04);
+  lastFrameTime = time;
+
+  if (gameKeys.left) rabbit.x -= rabbit.speed * delta;
+  if (gameKeys.right) rabbit.x += rabbit.speed * delta;
+  rabbit.x = Math.max(0, Math.min(gameCanvas.width - rabbit.width, rabbit.x));
+
+  chalkTimer -= delta;
+  if (chalkTimer <= 0) {
+    addFallingChalk();
+    chalkTimer = Math.max(0.28, 0.82 - gameScore / 180);
+  }
+
+  chalks.forEach(function (chalk) { chalk.y += chalk.speed * delta; });
+  if (chalks.some(isChalkHit)) {
+    drawGame();
+    finishChalkGame();
+    return;
+  }
+
+  chalks = chalks.filter(function (chalk) { return chalk.y < gameCanvas.height + 50; });
+  gameScore += delta * 10;
+  currentScore.textContent = "점수 " + Math.floor(gameScore);
+  drawGame();
+  gameAnimation = requestAnimationFrame(updateChalkGame);
+}
+
+function startChalkGame() {
+  chalks = [];
+  rabbit.x = (gameCanvas.width - rabbit.width) / 2;
+  gameScore = 0;
+  chalkTimer = 0.7;
+  currentScore.textContent = "점수 0";
+  gameOverlay.hidden = true;
+  gameRunning = true;
+  lastFrameTime = performance.now();
+  gameAnimation = requestAnimationFrame(updateChalkGame);
+}
+
+function setMoveKey(direction, pressed) {
+  gameKeys[direction] = pressed;
+}
+
+window.addEventListener("keydown", function (event) {
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    if (gameRunning) event.preventDefault();
+    setMoveKey(event.key === "ArrowLeft" ? "left" : "right", true);
+  }
+});
+
+window.addEventListener("keyup", function (event) {
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    setMoveKey(event.key === "ArrowLeft" ? "left" : "right", false);
+  }
+});
+
+function connectMoveButton(button, direction) {
+  button.addEventListener("pointerdown", function (event) {
+    event.preventDefault();
+    setMoveKey(direction, true);
+    button.setPointerCapture(event.pointerId);
+  });
+  button.addEventListener("pointerup", function () { setMoveKey(direction, false); });
+  button.addEventListener("pointercancel", function () { setMoveKey(direction, false); });
+}
+
+if (gameCanvas) {
+  rabbitImage.addEventListener("load", drawGame);
+  gameStartButton.addEventListener("click", startChalkGame);
+  connectMoveButton(moveLeftButton, "left");
+  connectMoveButton(moveRightButton, "right");
+  drawGame();
 }

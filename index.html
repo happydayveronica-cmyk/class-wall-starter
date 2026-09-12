@@ -314,25 +314,33 @@
       white-space: pre-wrap;
       flex-grow: 1;
     }
-    /* 담벼락 아래에서 함께 즐기는 반응 속도 게임 */
+    /* 담벼락 아래에서 함께 즐기는 분필 피하기 게임 */
     .game-section { margin-top: 48px; padding-top: 32px; border-top: 1px solid #e5e8eb; }
-    .game-card { overflow: hidden; background: #fff; border: 1px solid #e5e8eb; border-radius: 18px; box-shadow: 0 8px 24px rgba(25, 31, 40, 0.06); }
-    .game-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 24px; }
+    .game-card { overflow: hidden; background: #fff; border: 1px solid #d8dee5; border-radius: 18px; box-shadow: 0 8px 24px rgba(25, 31, 40, 0.08); }
+    .game-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 24px; }
     .game-title h2 { margin-bottom: 5px; color: #191f28; font-size: 20px; letter-spacing: -0.3px; }
     .game-title p { color: #6b7684; font-size: 14px; line-height: 1.5; }
-    .best-score { flex-shrink: 0; padding: 8px 12px; color: #1b64da; background: #e8f3ff; border-radius: 999px; font-size: 13px; font-weight: 700; }
-    .reaction-board { width: 100%; min-height: 210px; padding: 24px; border: 0; border-top: 1px solid #eef0f2; background: #f2f4f6; color: #333d4b; font-family: inherit; cursor: pointer; transition: background-color 0.18s ease, color 0.18s ease; touch-action: manipulation; }
-    .reaction-board:hover { background: #e9ecef; }
-    .reaction-board.waiting { background: #ffec99; color: #7c4d00; }
-    .reaction-board.ready { background: #20c997; color: #fff; }
-    .reaction-board.result { background: #e8f3ff; color: #1b64da; }
-    .game-main-text { display: block; margin-bottom: 8px; font-size: 25px; font-weight: 800; letter-spacing: -0.5px; }
-    .game-sub-text { display: block; font-size: 14px; font-weight: 500; line-height: 1.5; }
+    .game-score { display: flex; gap: 8px; flex-shrink: 0; }
+    .score-badge { padding: 7px 11px; color: #1b64da; background: #e8f3ff; border-radius: 999px; font-size: 13px; font-weight: 700; }
+    .game-stage { position: relative; background: #174a3a; border-top: 8px solid #a67c52; border-bottom: 8px solid #a67c52; }
+    #chalkGame { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
+    .game-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(12, 48, 37, 0.7); text-align: center; }
+    .game-overlay[hidden] { display: none; }
+    .game-message { max-width: 360px; padding: 24px; color: #fff; background: rgba(9, 37, 29, 0.9); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 16px; }
+    .game-message strong { display: block; margin-bottom: 8px; font-size: 24px; }
+    .game-message span { display: block; margin-bottom: 18px; font-size: 14px; line-height: 1.5; color: #d8efe7; }
+    .game-start { border: 0; border-radius: 10px; padding: 11px 22px; background: #ffd43b; color: #513c00; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer; }
+    .game-start:hover { background: #ffe066; }
+    .mobile-controls { display: flex; justify-content: center; gap: 12px; padding: 14px; background: #f8f9fa; }
+    .move-button { width: 110px; min-height: 46px; border: 1px solid #d1d6db; border-radius: 10px; background: #fff; color: #333d4b; font-family: inherit; font-size: 20px; font-weight: 800; cursor: pointer; touch-action: none; }
+    .move-button:active { color: #fff; background: #3182f6; border-color: #3182f6; }
 
     @media (max-width: 560px) {
       .game-heading { align-items: flex-start; flex-direction: column; padding: 20px; }
-      .reaction-board { min-height: 190px; }
-      .game-main-text { font-size: 22px; }
+      .game-score { width: 100%; }
+      .score-badge { flex: 1; text-align: center; }
+      .game-message { padding: 18px; }
+      .game-message strong { font-size: 21px; }
     }
   </style>
 </head>
@@ -379,15 +387,28 @@
       <div class="game-card">
         <div class="game-heading">
           <div class="game-title">
-            <h2 id="reactionGameTitle">⚡ 번개 반응 게임</h2>
-            <p>노란 화면이 초록색으로 바뀌는 순간 빠르게 누르세요.</p>
+            <h2 id="reactionGameTitle">🐰 분필 피하기</h2>
+            <p>키보드의 ← → 방향키로 토끼를 움직여 분필을 피하세요.</p>
           </div>
-          <span id="bestScore" class="best-score">최고 기록: --</span>
+          <div class="game-score" aria-live="polite">
+            <span id="currentScore" class="score-badge">점수 0</span>
+            <span id="bestScore" class="score-badge">최고 0</span>
+          </div>
         </div>
-        <button id="reactionBoard" class="reaction-board" type="button" aria-live="polite">
-          <span id="gameMainText" class="game-main-text">게임 시작</span>
-          <span id="gameSubText" class="game-sub-text">여기를 눌러 도전해 보세요!</span>
-        </button>
+        <div class="game-stage">
+          <canvas id="chalkGame" width="840" height="420" aria-label="토끼를 움직여 떨어지는 분필을 피하는 게임"></canvas>
+          <div id="gameOverlay" class="game-overlay">
+            <div class="game-message">
+              <strong id="gameMessageTitle">준비됐나요?</strong>
+              <span id="gameMessageText">분필에 닿지 않고 오래 버틸수록 점수가 올라가요.</span>
+              <button id="gameStartButton" class="game-start" type="button">게임 시작</button>
+            </div>
+          </div>
+        </div>
+        <div class="mobile-controls" aria-label="토끼 이동 버튼">
+          <button id="moveLeft" class="move-button" type="button" aria-label="왼쪽으로 이동">←</button>
+          <button id="moveRight" class="move-button" type="button" aria-label="오른쪽으로 이동">→</button>
+        </div>
       </div>
     </section>
   </div>
