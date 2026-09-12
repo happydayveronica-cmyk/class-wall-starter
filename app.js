@@ -4,6 +4,8 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
+  setDoc,
   getDocs,
   getFirestore,
   orderBy,
@@ -32,6 +34,40 @@ const memosCollection = collection(db, "memos");
 const auth = getAuth(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 let currentUser = null;
+let currentRole = "guest"; // 'teacher' 또는 'student'
+
+// 사용자의 역할(교사/학생)을 불러옵니다
+async function loadUserRole(user) {
+  if (!user) {
+    currentRole = "guest";
+    return;
+  }
+  try {
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      currentRole = userSnap.data().role || "student";
+    } else {
+      // 기본값으로 student 부여
+      currentRole = "student";
+      await setDoc(userRef, { role: "student" });
+    }
+  } catch (error) {
+    console.error("사용자 역할을 불러오지 못했습니다.", error);
+    currentRole = "student";
+  }
+}
+
+// 실습 편의를 위해 교사/학생 역할을 전환하는 함수
+async function toggleRole() {
+  if (!currentUser) return;
+  const newRole = currentRole === "teacher" ? "student" : "teacher";
+  const userRef = doc(db, "users", currentUser.uid);
+  await setDoc(userRef, { role: newRole });
+  currentRole = newRole;
+  renderUserArea();
+  render();
+}
 
 // ===================================================
 // 우리 반 담벼락 - 시작점
@@ -72,7 +108,12 @@ async function loadMemos() {
 // 메모를 새로 씁니다.
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
 async function addMemo(text) {
-  // 5글자 이상일 때만 저장되도록 확인합니다.
+  // 로그인 확인: 학생/교사만 메모를 작성할 수 있습니다
+  if (!currentUser) {
+    throw new Error("로그인한 사용자만 메모를 작성할 수 있습니다.");
+  }
+
+  // 5글자 이상일 때만 저장되도록 확인합니다
   if (text.length < 5) {
     throw new Error("메모는 5글자 이상이어야 합니다.");
   }
@@ -80,12 +121,9 @@ async function addMemo(text) {
   const memoData = {
     text: text,
     createdAt: Date.now(),
-    userName: currentUser ? (currentUser.displayName || "익명") : "익명"
+    userName: currentUser.displayName || "익명",
+    uid: currentUser.uid
   };
-
-  if (currentUser && currentUser.uid) {
-    memoData.uid = currentUser.uid;
-  }
 
   await addDoc(memosCollection, memoData);
 }
@@ -103,17 +141,49 @@ async function deleteMemo(id) {
 
 const userArea = document.getElementById("userArea");
 
-// 사용자 영역을 그립니다 (로그인/로그아웃 버튼)
+// 사용자 영역을 그립니다 (로그인/로그아웃 버튼 및 역할 뱃지)
 function renderUserArea() {
   if (!userArea) return;
   userArea.innerHTML = "";
 
   if (currentUser) {
-    // 로그인 상태: 사용자 뱃지와 로그아웃 버튼
-    const badge = document.createElement("span");
-    badge.className = "user-badge";
-    badge.textContent = (currentUser.displayName || "선생님") + "님";
+    // 역할 뱃지 (교사 / 학생)
+    const roleBadge = document.createElement("span");
+    roleBadge.className = "user-badge";
+    roleBadge.style.marginRight = "6px";
+    if (currentRole === "teacher") {
+      roleBadge.textContent = "👨‍🏫 교사 (teacher)";
+      roleBadge.style.backgroundColor = "#e8f3ff";
+      roleBadge.style.color = "#1b64da";
+    } else {
+      roleBadge.textContent = "🎒 학생 (student)";
+      roleBadge.style.backgroundColor = "#f1f3f5";
+      roleBadge.style.color = "#495057";
+    }
 
+    // 사용자 이름
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = (currentUser.displayName || "사용자") + "님";
+    nameSpan.style.marginRight = "8px";
+    nameSpan.style.fontWeight = "600";
+
+    // 실습용 역할 전환 버튼
+    const toggleButton = document.createElement("button");
+    toggleButton.textContent = currentRole === "teacher" ? "학생으로 전환" : "교사로 전환";
+    toggleButton.title = "테스트를 위해 교사/학생 역할을 전환합니다";
+    toggleButton.style.fontSize = "12px";
+    toggleButton.style.padding = "4px 8px";
+    toggleButton.style.marginRight = "8px";
+    toggleButton.onclick = async function () {
+      try {
+        await toggleRole();
+      } catch (error) {
+        console.error("역할 변경 실패:", error);
+        alert("역할 변경에 실패했습니다.");
+      }
+    };
+
+    // 로그아웃 버튼
     const logoutButton = document.createElement("button");
     logoutButton.textContent = "로그아웃";
     logoutButton.onclick = async function () {
@@ -125,7 +195,9 @@ function renderUserArea() {
       }
     };
 
-    userArea.appendChild(badge);
+    userArea.appendChild(roleBadge);
+    userArea.appendChild(nameSpan);
+    userArea.appendChild(toggleButton);
     userArea.appendChild(logoutButton);
   } else {
     // 로그아웃 상태: Google 로그인 버튼
@@ -145,9 +217,15 @@ function renderUserArea() {
 }
 
 // 로그인 상태 변경 감지
-onAuthStateChanged(auth, function (user) {
+onAuthStateChanged(auth, async function (user) {
   currentUser = user;
+  if (user) {
+    await loadUserRole(user);
+  } else {
+    currentRole = "guest";
+  }
   renderUserArea();
+  render();
 });
 
 
@@ -191,20 +269,24 @@ function makeMemo(memo) {
   authorDiv.appendChild(name);
   header.appendChild(authorDiv);
 
-  const del = document.createElement("button");
-  del.className = "del-btn";
-  del.textContent = "×";
-  del.title = "삭제";
-  del.addEventListener("click", async function () {
-    try {
-      await deleteMemo(memo.id);
-      await render();
-    } catch (error) {
-      console.error("메모를 지우지 못했습니다.", error);
-      alert("메모를 지우지 못했습니다. 잠시 후 다시 시도해 주세요.");
-    }
-  });
-  header.appendChild(del);
+  // 교사(teacher)만 삭제할 수 있습니다 (학생은 생성만 가능하고 삭제 불가)
+  if (currentRole === "teacher") {
+    const del = document.createElement("button");
+    del.className = "del-btn";
+    del.textContent = "×";
+    del.title = "삭제 (교사 전용 권한)";
+    del.addEventListener("click", async function () {
+      try {
+        await deleteMemo(memo.id);
+        await render();
+      } catch (error) {
+        console.error("메모를 지우지 못했습니다.", error);
+        alert("메모를 지우지 못했습니다. 교사 권한이 필요합니다.");
+      }
+    });
+    header.appendChild(del);
+  }
+
   div.appendChild(header);
 
   // 메모 본문
@@ -230,6 +312,11 @@ input.addEventListener("keydown", async function (e) {
 
     const text = input.value.trim();
     if (text === "") return;
+
+    if (!currentUser) {
+      alert("로그인 후 메모를 작성할 수 있습니다. 상단의 Google 로그인을 먼저 해주세요.");
+      return;
+    }
 
     // 5글자 이상 입력 확인
     if (text.length < 5) {
