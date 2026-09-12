@@ -3,21 +3,40 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // 교사 지정 이메일 목록
+    function isTeacherEmail() {
+      return request.auth != null && request.auth.token.email in [
+        'happydayveronica@gmail.com'
+      ];
+    }
+
     // 교사(teacher)인지 확인하는 함수
     function isTeacher() {
-      return request.auth != null && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher')
-        || request.auth.token.role == 'teacher'
+      return isTeacherEmail() || (
+        request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'
       );
+    }
+
+    // 승인된 학생(student)인지 확인하는 함수
+    function isApprovedStudent() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
     // 사용자 프로필 및 역할 정보 (users 컬렉션)
     match /users/{userId} {
-      // 로그인한 사용자는 다른 사용자의 역할을 읽을 수 있습니다
-      allow read: if request.auth != null;
-      // 본인 문서만 등록/수정 가능
-      allow create, update: if request.auth != null && request.auth.uid == userId;
+      // 본인 문서이거나 교사이면 읽기 가능
+      allow read: if request.auth != null && (request.auth.uid == userId || isTeacher());
+
+      // 본인 문서 최초 등록 가능
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      // 교사는 학생 승인 등 모든 사용자 정보를 수정할 수 있고, 본인은 자기 문서 수정 가능
+      allow update: if isTeacher() || (request.auth != null && request.auth.uid == userId);
     }
 
     // 메모 (memos 컬렉션)
@@ -25,9 +44,8 @@ service cloud.firestore {
       // 누구나 메모를 읽을 수 있습니다
       allow read: if true;
 
-      // 생성: 로그인된 사용자가 본인의 uid로 생성할 때만 허용 (학생 및 교사)
-      // 학생은 자기 것만 생성할 수 있습니다.
-      allow create: if request.auth != null
+      // 생성: 교사이거나 승인된 학생만 자기 UID로 생성 가능
+      allow create: if (isTeacher() || isApprovedStudent())
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.text is string
         && request.resource.data.text.size() >= 5
@@ -37,8 +55,7 @@ service cloud.firestore {
           || request.resource.data.createdAt is int
         );
 
-      // 교사(teacher)만 모든 메모를 수정하거나 삭제할 수 있습니다.
-      // 학생은 다른 사람의 메모를 수정/삭제할 수 없습니다.
+      // 수정 및 삭제: 오직 교사(teacher)만 가능
       allow update, delete: if isTeacher();
     }
 

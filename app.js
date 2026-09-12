@@ -6,6 +6,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   getDocs,
   getFirestore,
   orderBy,
@@ -33,40 +34,196 @@ const db = getFirestore(firebaseApp);
 const memosCollection = collection(db, "memos");
 const auth = getAuth(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
-let currentUser = null;
-let currentRole = "guest"; // 'teacher' 또는 'student'
+// --- 교사로 지정할 이메일 목록 ---
+// 여기에 등록된 계정으로 로그인하면 교사(teacher) 권한이 자동으로 부여됩니다.
+const TEACHER_EMAILS = [
+  "happydayveronica@gmail.com"
+];
 
-// 사용자의 역할(교사/학생)을 불러옵니다
+let currentUser = null;
+let currentRole = "guest";       // 'teacher', 'student', 'guest'
+let currentStatus = "pending";   // 'approved', 'pending'
+
+// 사용자의 역할과 승인 상태를 불러옵니다
 async function loadUserRole(user) {
   if (!user) {
     currentRole = "guest";
+    currentStatus = "pending";
     return;
   }
+
   try {
     const userRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userRef);
-    if (userSnap.exists()) {
-      currentRole = userSnap.data().role || "student";
+    const isTeacherEmail = user.email && TEACHER_EMAILS.includes(user.email.toLowerCase());
+
+    if (isTeacherEmail) {
+      // 1) 지정된 교사 계정: 자동으로 교사 및 승인 상태 부여
+      currentRole = "teacher";
+      currentStatus = "approved";
+      await setDoc(userRef, {
+        role: "teacher",
+        status: "approved",
+        name: user.displayName || "선생님",
+        email: user.email || ""
+      }, { merge: true });
+    } else if (userSnap.exists()) {
+      // 2) 기존 사용자: Firestore에 저장된 역할과 승인 상태 확인
+      const data = userSnap.data();
+      currentRole = data.role || "student";
+      currentStatus = data.status || "pending";
     } else {
-      // 기본값으로 student 부여
+      // 3) 새로운 학생: 기본적으로 '승인 대기(pending)' 상태로 등록
       currentRole = "student";
-      await setDoc(userRef, { role: "student" });
+      currentStatus = "pending";
+      await setDoc(userRef, {
+        role: "student",
+        status: "pending",
+        name: user.displayName || "학생",
+        email: user.email || "",
+        createdAt: Date.now()
+      });
     }
   } catch (error) {
-    console.error("사용자 역할을 불러오지 못했습니다.", error);
+    console.error("사용자 정보 조회 실패:", error);
     currentRole = "student";
+    currentStatus = "pending";
   }
 }
 
-// 실습 편의를 위해 교사/학생 역할을 전환하는 함수
-async function toggleRole() {
-  if (!currentUser) return;
-  const newRole = currentRole === "teacher" ? "student" : "teacher";
-  const userRef = doc(db, "users", currentUser.uid);
-  await setDoc(userRef, { role: newRole });
-  currentRole = newRole;
-  renderUserArea();
-  render();
+// 교사용: 학생 승인 처리 함수
+async function approveStudent(studentId) {
+  try {
+    await updateDoc(doc(db, "users", studentId), {
+      status: "approved"
+    });
+    alert("학생 승인이 완료되었습니다.");
+    await renderTeacherPanel();
+  } catch (error) {
+    console.error("학생 승인 실패:", error);
+    alert("학생 승인 처리에 실패했습니다.");
+  }
+}
+
+// 교사용: 학생 승인 취소(대기) 처리 함수
+async function revokeStudent(studentId) {
+  try {
+    await updateDoc(doc(db, "users", studentId), {
+      status: "pending"
+    });
+    alert("학생 승인이 취소되었습니다.");
+    await renderTeacherPanel();
+  } catch (error) {
+    console.error("학생 승인 취소 실패:", error);
+    alert("승인 취소 처리에 실패했습니다.");
+  }
+}
+
+// 교사용 학생 승인 관리 패널 렌더링
+async function renderTeacherPanel() {
+  const teacherPanel = document.getElementById("teacherPanel");
+  const studentList = document.getElementById("studentList");
+  const pendingCount = document.getElementById("pendingCount");
+
+  if (!teacherPanel || !studentList) return;
+
+  if (currentRole !== "teacher") {
+    teacherPanel.style.display = "none";
+    return;
+  }
+
+  teacherPanel.style.display = "block";
+  studentList.innerHTML = "<p style='font-size:13px; color:#888;'>목록 불러오는 중...</p>";
+
+  try {
+    const usersSnapshot = await getDocs(collection(db, "users"));
+    const students = [];
+    usersSnapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.role === "student") {
+        students.push({ id: docSnap.id, ...data });
+      }
+    });
+
+    studentList.innerHTML = "";
+
+    const pendingStudents = students.filter(s => s.status !== "approved");
+    if (pendingCount) {
+      pendingCount.textContent = "대기 " + pendingStudents.length + "명";
+    }
+
+    if (students.length === 0) {
+      studentList.innerHTML = "<p style='font-size:13px; color:#888;'>가입한 학생이 없습니다.</p>";
+      return;
+    }
+
+    students.forEach(student => {
+      const item = document.createElement("div");
+      item.className = "student-item";
+
+      const info = document.createElement("div");
+      info.className = "student-info";
+
+      const name = document.createElement("span");
+      name.textContent = student.name || "익명 학생";
+      name.style.fontWeight = "600";
+
+      const statusBadge = document.createElement("span");
+      statusBadge.className = "student-status " + (student.status === "approved" ? "status-approved" : "status-pending");
+      statusBadge.textContent = student.status === "approved" ? "승인됨" : "승인 대기";
+
+      info.appendChild(name);
+      info.appendChild(statusBadge);
+
+      const actionBtn = document.createElement("button");
+      if (student.status === "approved") {
+        actionBtn.className = "btn-revoke";
+        actionBtn.textContent = "승인 취소";
+        actionBtn.onclick = () => revokeStudent(student.id);
+      } else {
+        actionBtn.className = "btn-approve";
+        actionBtn.textContent = "승인하기";
+        actionBtn.onclick = () => approveStudent(student.id);
+      }
+
+      item.appendChild(info);
+      item.appendChild(actionBtn);
+      studentList.appendChild(item);
+    });
+  } catch (error) {
+    console.error("학생 목록 불러오기 실패:", error);
+    studentList.innerHTML = "<p style='font-size:13px; color:#e03131;'>학생 목록을 불러오지 못했습니다.</p>";
+  }
+}
+
+// 사용자 권한에 따라 화면 요소 제어
+function updateUIByRole() {
+  const writer = document.getElementById("writer");
+  const approvalNotice = document.getElementById("approvalNotice");
+  const teacherPanel = document.getElementById("teacherPanel");
+
+  if (currentRole === "teacher") {
+    if (writer) writer.style.display = "block";
+    if (approvalNotice) approvalNotice.style.display = "none";
+    if (teacherPanel) teacherPanel.style.display = "block";
+    renderTeacherPanel();
+  } else if (currentRole === "student") {
+    if (teacherPanel) teacherPanel.style.display = "none";
+    if (currentStatus === "approved") {
+      // 승인된 학생
+      if (writer) writer.style.display = "block";
+      if (approvalNotice) approvalNotice.style.display = "none";
+    } else {
+      // 미승인 학생
+      if (writer) writer.style.display = "none";
+      if (approvalNotice) approvalNotice.style.display = "block";
+    }
+  } else {
+    // 게스트
+    if (writer) writer.style.display = "block";
+    if (approvalNotice) approvalNotice.style.display = "none";
+    if (teacherPanel) teacherPanel.style.display = "none";
+  }
 }
 
 // ===================================================
@@ -108,213 +265,13 @@ async function loadMemos() {
 // 메모를 새로 씁니다.
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
 async function addMemo(text) {
-  // 로그인 확인: 학생/교사만 메모를 작성할 수 있습니다
   if (!currentUser) {
-    throw new Error("로그인한 사용자만 메모를 작성할 수 있습니다.");
-  }
-
-  // 5글자 이상일 때만 저장되도록 확인합니다
-  if (text.length < 5) {
-    throw new Error("메모는 5글자 이상이어야 합니다.");
-  }
-
-  const memoData = {
-    text: text,
-    createdAt: Date.now(),
-    userName: currentUser.displayName || "익명",
-    uid: currentUser.uid
-  };
-
-  await addDoc(memosCollection, memoData);
-}
-
-// 메모를 지웁니다.
-// 백엔드 2: 지금은 누구든 남의 메모를 지울 수 있습니다. 이걸 막는 것이 과제입니다.
-async function deleteMemo(id) {
-  await deleteDoc(doc(db, "memos", id));
-}
-
-
-// ===================================================
-// 로그인 및 사용자 영역
-// ===================================================
-
-const userArea = document.getElementById("userArea");
-
-// 사용자 영역을 그립니다 (로그인/로그아웃 버튼 및 역할 뱃지)
-function renderUserArea() {
-  if (!userArea) return;
-  userArea.innerHTML = "";
-
-  if (currentUser) {
-    // 역할 뱃지 (교사 / 학생)
-    const roleBadge = document.createElement("span");
-    roleBadge.className = "user-badge";
-    roleBadge.style.marginRight = "6px";
-    if (currentRole === "teacher") {
-      roleBadge.textContent = "👨‍🏫 교사 (teacher)";
-      roleBadge.style.backgroundColor = "#e8f3ff";
-      roleBadge.style.color = "#1b64da";
-    } else {
-      roleBadge.textContent = "🎒 학생 (student)";
-      roleBadge.style.backgroundColor = "#f1f3f5";
-      roleBadge.style.color = "#495057";
+      alert("로그인 후 메모를 작성할 수 있습니다. 상단의 Google 로그인을 먼저 해주세요.");
+      return;
     }
 
-    // 사용자 이름
-    const nameSpan = document.createElement("span");
-    nameSpan.textContent = (currentUser.displayName || "사용자") + "님";
-    nameSpan.style.marginRight = "8px";
-    nameSpan.style.fontWeight = "600";
-
-    // 실습용 역할 전환 버튼
-    const toggleButton = document.createElement("button");
-    toggleButton.textContent = currentRole === "teacher" ? "학생으로 전환" : "교사로 전환";
-    toggleButton.title = "테스트를 위해 교사/학생 역할을 전환합니다";
-    toggleButton.style.fontSize = "12px";
-    toggleButton.style.padding = "4px 8px";
-    toggleButton.style.marginRight = "8px";
-    toggleButton.onclick = async function () {
-      try {
-        await toggleRole();
-      } catch (error) {
-        console.error("역할 변경 실패:", error);
-        alert("역할 변경에 실패했습니다.");
-      }
-    };
-
-    // 로그아웃 버튼
-    const logoutButton = document.createElement("button");
-    logoutButton.textContent = "로그아웃";
-    logoutButton.onclick = async function () {
-      try {
-        await signOut(auth);
-      } catch (error) {
-        console.error("로그아웃 실패:", error);
-        alert("로그아웃 중 오류가 발생했습니다.");
-      }
-    };
-
-    userArea.appendChild(roleBadge);
-    userArea.appendChild(nameSpan);
-    userArea.appendChild(toggleButton);
-    userArea.appendChild(logoutButton);
-  } else {
-    // 로그아웃 상태: Google 로그인 버튼
-    const loginButton = document.createElement("button");
-    loginButton.textContent = "Google 로그인";
-    loginButton.onclick = async function () {
-      try {
-        await signInWithPopup(auth, googleProvider);
-      } catch (error) {
-        console.error("로그인 실패:", error);
-        alert("로그인에 실패했습니다. 팝업 차단 여부를 확인해 주세요.");
-      }
-    };
-
-    userArea.appendChild(loginButton);
-  }
-}
-
-// 로그인 상태 변경 감지
-onAuthStateChanged(auth, async function (user) {
-  currentUser = user;
-  if (user) {
-    await loadUserRole(user);
-  } else {
-    currentRole = "guest";
-  }
-  renderUserArea();
-  render();
-});
-
-
-// ===================================================
-// 화면 그리기
-// ===================================================
-
-async function render() {
-  const wall = document.getElementById("wall");
-  wall.innerHTML = "";
-
-  try {
-    const loadedMemos = await loadMemos();
-    loadedMemos.forEach(function (memo) {
-      wall.appendChild(makeMemo(memo));
-    });
-  } catch (error) {
-    console.error("메모를 불러오지 못했습니다.", error);
-    wall.textContent = "메모를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
-  }
-}
-
-// 메모 한 장 만들기
-function makeMemo(memo) {
-  const div = document.createElement("div");
-  div.className = "memo";
-
-  // 상단 헤더: 작성자 및 삭제 버튼
-  const header = document.createElement("div");
-  header.className = "memo-header";
-
-  const authorDiv = document.createElement("div");
-  authorDiv.className = "author";
-
-  const dot = document.createElement("span");
-  dot.className = "author-dot";
-  authorDiv.appendChild(dot);
-
-  const name = document.createElement("span");
-  name.textContent = memo.userName || "익명";
-  authorDiv.appendChild(name);
-  header.appendChild(authorDiv);
-
-  // 교사(teacher)만 삭제할 수 있습니다 (학생은 생성만 가능하고 삭제 불가)
-  if (currentRole === "teacher") {
-    const del = document.createElement("button");
-    del.className = "del-btn";
-    del.textContent = "×";
-    del.title = "삭제 (교사 전용 권한)";
-    del.addEventListener("click", async function () {
-      try {
-        await deleteMemo(memo.id);
-        await render();
-      } catch (error) {
-        console.error("메모를 지우지 못했습니다.", error);
-        alert("메모를 지우지 못했습니다. 교사 권한이 필요합니다.");
-      }
-    });
-    header.appendChild(del);
-  }
-
-  div.appendChild(header);
-
-  // 메모 본문
-  const span = document.createElement("span");
-  span.className = "memo-text";
-  span.textContent = memo.text;
-  div.appendChild(span);
-
-  return div;
-}
-
-
-// ===================================================
-// 메모 쓰는 칸
-// 엔터를 누르면 담벼락에 붙습니다 (줄바꿈은 Shift + 엔터)
-// ===================================================
-
-const input = document.getElementById("input");
-
-input.addEventListener("keydown", async function (e) {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-
-    const text = input.value.trim();
-    if (text === "") return;
-
-    if (!currentUser) {
-      alert("로그인 후 메모를 작성할 수 있습니다. 상단의 Google 로그인을 먼저 해주세요.");
+    if (currentRole === "student" && currentStatus !== "approved") {
+      alert("선생님의 승인 후 메모를 작성할 수 있습니다. 승인을 기다려 주세요.");
       return;
     }
 

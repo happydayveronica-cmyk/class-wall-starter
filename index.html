@@ -92,6 +92,103 @@
       border-color: #b0b8c1;
     }
 
+    /* 승인 대기 알림 배너 */
+    .notice-box {
+      background: #fff9db;
+      border: 1px solid #ffe066;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #795548;
+    }
+
+    /* 교사용 학생 승인 관리 패널 */
+    .teacher-box {
+      background: #ffffff;
+      border: 1px solid #d0ebff;
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 28px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    }
+    .teacher-box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #edf2f7;
+    }
+    .teacher-box-header h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1c7ed6;
+    }
+    .badge-count {
+      background: #e7f5ff;
+      color: #1c7ed6;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .student-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #f8f9fa;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .student-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .student-status {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .status-pending {
+      background: #fff3bf;
+      color: #d9480f;
+    }
+    .status-approved {
+      background: #d3f9d8;
+      color: #2b8a3e;
+    }
+    .student-item button {
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-approve {
+      background: #3182f6;
+      color: white;
+    }
+    .btn-approve:hover {
+      background: #1b64da;
+    }
+    .btn-revoke {
+      background: #ffffff;
+      border-color: #dee2e6 !important;
+      color: #868e96;
+    }
+    .btn-revoke:hover {
+      background: #fff0f0;
+      color: #e03131;
+    }
+
     /* 메모 입력창 */
     #writer {
       background: #ffffff;
@@ -146,7 +243,7 @@
       gap: 16px;
     }
 
-    /* 메모 카드 - 따뜻하고 정갈한 페이퍼 느낌 */
+    /* 메모 카드 */
     .memo {
       background: #ffffff;
       border: 1px solid #e9ecef;
@@ -230,6 +327,21 @@
       </div>
       <div id="userArea">아직 로그인 기능이 없습니다.</div>
     </header>
+
+    <!-- 승인 대기 중인 학생용 안내 배너 -->
+    <div id="approvalNotice" class="notice-box" style="display: none;">
+      ⏳ <strong>선생님의 승인을 기다리고 있습니다.</strong><br>
+      선생님이 학생으로 승인해 주시면 메모를 작성할 수 있습니다.
+    </div>
+
+    <!-- 교사용 학생 승인 관리 패널 -->
+    <div id="teacherPanel" class="teacher-box" style="display: none;">
+      <div class="teacher-box-header">
+        <h3>👨‍🏫 학생 가입 승인 관리</h3>
+        <span id="pendingCount" class="badge-count">대기 0명</span>
+      </div>
+      <div id="studentList"></div>
+    </div>
 
     <!-- 메모 작성 영역 -->
     <div id="writer">
