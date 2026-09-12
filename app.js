@@ -1,3 +1,28 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA7aenT69jFp56LZwtAGOkqYew3VgVCB9E",
+  authDomain: "class-wall-e4b66.firebaseapp.com",
+  projectId: "class-wall-e4b66",
+  storageBucket: "class-wall-e4b66.firebasestorage.app",
+  messagingSenderId: "600192168603",
+  appId: "1:600192168603:web:265d006c7b6923085c4c3e"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const memosCollection = collection(db, "memos");
+
 // ===================================================
 // 우리 반 담벼락 - 시작점
 //
@@ -9,13 +34,7 @@
 
 // --- 메모 목록 ---
 // createdAt 은 메모를 쓴 시각(밀리초)입니다. 이 값으로 순서를 정합니다.
-let memos = [
-  { id: 1, text: "오늘 과학 시간에 한 실험이 재미있었다", createdAt: 1757030400000 },
-  { id: 2, text: "궁금한 점 - 물은 왜 100도에서 끓나요?", createdAt: 1757030500000 },
-  { id: 3, text: "모둠 친구들이 도와줘서 고마웠다", createdAt: 1757030600000 }
-];
-
-let nextId = 4;  // 새 메모에 붙일 번호
+let memos = [];
 
 
 // ===================================================
@@ -26,29 +45,33 @@ let nextId = 4;  // 새 메모에 붙일 번호
 // 메모를 읽어 옵니다.
 // 백엔드 1: 여기가 Firestore에서 가져오는 코드로 바뀝니다.
 //           순서는 orderBy("createdAt") 으로 맞춥니다.
-function loadMemos() {
-  return memos.slice().sort(function (a, b) {
-    return a.createdAt - b.createdAt;
+async function loadMemos() {
+  const memosQuery = query(memosCollection, orderBy("createdAt", "asc"));
+  const snapshot = await getDocs(memosQuery);
+
+  memos = snapshot.docs.map(function (memoDoc) {
+    return {
+      id: memoDoc.id,
+      ...memoDoc.data()
+    };
   });
+
+  return memos;
 }
 
 // 메모를 새로 씁니다.
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
-function addMemo(text) {
-  memos.push({
-    id: nextId,
+async function addMemo(text) {
+  await addDoc(memosCollection, {
     text: text,
     createdAt: Date.now()
   });
-  nextId = nextId + 1;
 }
 
 // 메모를 지웁니다.
 // 백엔드 2: 지금은 누구든 남의 메모를 지울 수 있습니다. 이걸 막는 것이 과제입니다.
-function deleteMemo(id) {
-  memos = memos.filter(function (memo) {
-    return memo.id !== id;
-  });
+async function deleteMemo(id) {
+  await deleteDoc(doc(db, "memos", id));
 }
 
 
@@ -56,13 +79,19 @@ function deleteMemo(id) {
 // 화면 그리기
 // ===================================================
 
-function render() {
+async function render() {
   const wall = document.getElementById("wall");
   wall.innerHTML = "";
 
-  loadMemos().forEach(function (memo) {
-    wall.appendChild(makeMemo(memo));
-  });
+  try {
+    const loadedMemos = await loadMemos();
+    loadedMemos.forEach(function (memo) {
+      wall.appendChild(makeMemo(memo));
+    });
+  } catch (error) {
+    console.error("메모를 불러오지 못했습니다.", error);
+    wall.textContent = "메모를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  }
 }
 
 // 메모 한 장 만들기
@@ -72,10 +101,15 @@ function makeMemo(memo) {
 
   const del = document.createElement("button");
   del.textContent = "×";
-  del.onclick = function () {
-    deleteMemo(memo.id);
-    render();
-  };
+  del.addEventListener("click", async function () {
+    try {
+      await deleteMemo(memo.id);
+      await render();
+    } catch (error) {
+      console.error("메모를 지우지 못했습니다.", error);
+      alert("메모를 지우지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  });
   div.appendChild(del);
 
   const span = document.createElement("span");
@@ -93,18 +127,23 @@ function makeMemo(memo) {
 
 const input = document.getElementById("input");
 
-input.onkeydown = function (e) {
+input.addEventListener("keydown", async function (e) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
 
     const text = input.value.trim();
     if (text === "") return;
 
-    addMemo(text);
-    input.value = "";
-    render();
+    try {
+      await addMemo(text);
+      input.value = "";
+      await render();
+    } catch (error) {
+      console.error("메모를 저장하지 못했습니다.", error);
+      alert("메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
   }
-};
+});
 
 
 // 첫 화면 그리기
