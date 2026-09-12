@@ -484,3 +484,63 @@ renderUserArea();
 updateUIByRole();
 render();
 input.focus();
+
+
+// ===================================================
+// 담벼락 하단 번개 반응 게임
+// ===================================================
+
+const reactionBoard = document.getElementById("reactionBoard");
+const gameMainText = document.getElementById("gameMainText");
+const gameSubText = document.getElementById("gameSubText");
+const bestScore = document.getElementById("bestScore");
+
+let gameState = "idle";
+let reactionTimer = null;
+let readyAt = 0;
+let fastestTime = null;
+
+// 게임판의 안내 문구와 색을 현재 상태에 맞게 바꿉니다.
+function updateGameBoard(state, mainText, subText) {
+  gameState = state;
+  reactionBoard.className = "reaction-board" + (state === "idle" ? "" : " " + state);
+  gameMainText.textContent = mainText;
+  gameSubText.textContent = subText;
+}
+
+// 누르는 시간을 예상하기 어렵도록 1.5초에서 4초 사이에 시작합니다.
+function startReactionGame() {
+  clearTimeout(reactionTimer);
+  updateGameBoard("waiting", "기다리세요…", "초록색이 되기 전에 누르면 다시 시작해야 해요.");
+
+  const delay = 1500 + Math.random() * 2500;
+  reactionTimer = setTimeout(function () {
+    readyAt = performance.now();
+    updateGameBoard("ready", "지금 누르세요!", "번개처럼 빠르게!");
+  }, delay);
+}
+
+if (reactionBoard) {
+  reactionBoard.addEventListener("click", function () {
+    if (gameState === "idle" || gameState === "result") {
+      startReactionGame();
+      return;
+    }
+
+    if (gameState === "waiting") {
+      clearTimeout(reactionTimer);
+      updateGameBoard("result", "조금 빨랐어요!", "초록색으로 바뀐 뒤 눌러 주세요. 다시 누르면 시작해요.");
+      return;
+    }
+
+    if (gameState === "ready") {
+      const reactionTime = Math.round(performance.now() - readyAt);
+      if (fastestTime === null || reactionTime < fastestTime) {
+        fastestTime = reactionTime;
+        bestScore.textContent = "최고 기록: " + fastestTime + "ms";
+      }
+
+      updateGameBoard("result", reactionTime + "ms!", "멋진 반응이에요. 다시 누르면 한 번 더 도전할 수 있어요.");
+    }
+  });
+}

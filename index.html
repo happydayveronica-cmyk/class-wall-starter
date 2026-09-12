@@ -314,6 +314,26 @@
       white-space: pre-wrap;
       flex-grow: 1;
     }
+    /* 담벼락 아래에서 함께 즐기는 반응 속도 게임 */
+    .game-section { margin-top: 48px; padding-top: 32px; border-top: 1px solid #e5e8eb; }
+    .game-card { overflow: hidden; background: #fff; border: 1px solid #e5e8eb; border-radius: 18px; box-shadow: 0 8px 24px rgba(25, 31, 40, 0.06); }
+    .game-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 24px; }
+    .game-title h2 { margin-bottom: 5px; color: #191f28; font-size: 20px; letter-spacing: -0.3px; }
+    .game-title p { color: #6b7684; font-size: 14px; line-height: 1.5; }
+    .best-score { flex-shrink: 0; padding: 8px 12px; color: #1b64da; background: #e8f3ff; border-radius: 999px; font-size: 13px; font-weight: 700; }
+    .reaction-board { width: 100%; min-height: 210px; padding: 24px; border: 0; border-top: 1px solid #eef0f2; background: #f2f4f6; color: #333d4b; font-family: inherit; cursor: pointer; transition: background-color 0.18s ease, color 0.18s ease; touch-action: manipulation; }
+    .reaction-board:hover { background: #e9ecef; }
+    .reaction-board.waiting { background: #ffec99; color: #7c4d00; }
+    .reaction-board.ready { background: #20c997; color: #fff; }
+    .reaction-board.result { background: #e8f3ff; color: #1b64da; }
+    .game-main-text { display: block; margin-bottom: 8px; font-size: 25px; font-weight: 800; letter-spacing: -0.5px; }
+    .game-sub-text { display: block; font-size: 14px; font-weight: 500; line-height: 1.5; }
+
+    @media (max-width: 560px) {
+      .game-heading { align-items: flex-start; flex-direction: column; padding: 20px; }
+      .reaction-board { min-height: 190px; }
+      .game-main-text { font-size: 22px; }
+    }
   </style>
 </head>
 <body>
@@ -353,6 +373,23 @@
 
     <!-- 담벼락 메모 목록 -->
     <div id="wall"></div>
+
+    <!-- 담벼락 하단 미니 게임 -->
+    <section class="game-section" aria-labelledby="reactionGameTitle">
+      <div class="game-card">
+        <div class="game-heading">
+          <div class="game-title">
+            <h2 id="reactionGameTitle">⚡ 번개 반응 게임</h2>
+            <p>노란 화면이 초록색으로 바뀌는 순간 빠르게 누르세요.</p>
+          </div>
+          <span id="bestScore" class="best-score">최고 기록: --</span>
+        </div>
+        <button id="reactionBoard" class="reaction-board" type="button" aria-live="polite">
+          <span id="gameMainText" class="game-main-text">게임 시작</span>
+          <span id="gameSubText" class="game-sub-text">여기를 눌러 도전해 보세요!</span>
+        </button>
+      </div>
+    </section>
   </div>
 
   <script type="module" src="app.js"></script>
