@@ -3,14 +3,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 교사 지정 이메일 목록
+    // 1. 지정된 교사 이메일 검증 함수
     function isTeacherEmail() {
       return request.auth != null && request.auth.token.email in [
         'happydayveronica@gmail.com'
       ];
     }
 
-    // 교사(teacher)인지 확인하는 함수
+    // 2. 교사(teacher) 권한 검증 함수
     function isTeacher() {
       return isTeacherEmail() || (
         request.auth != null &&
@@ -19,7 +19,7 @@ service cloud.firestore {
       );
     }
 
-    // 승인된 학생(student)인지 확인하는 함수
+    // 3. 교사의 승인을 받은 정식 학생(student) 검증 함수
     function isApprovedStudent() {
       return request.auth != null &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -27,24 +27,40 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
-    // 사용자 프로필 및 역할 정보 (users 컬렉션)
+    // ===================================================
+    // 사용자 프로필 (users 컬렉션) - 권한 위조 방어 규칙
+    // ===================================================
     match /users/{userId} {
-      // 본인 문서이거나 교사이면 읽기 가능
+      // 본인이거나 교사만 사용자 정보를 조회할 수 있습니다
       allow read: if request.auth != null && (request.auth.uid == userId || isTeacher());
 
-      // 본인 문서 최초 등록 가능
-      allow create: if request.auth != null && request.auth.uid == userId;
+      // [해킹 방어 1] 최초 가입 시 교사 이메일이 아니면 무조건 학생(student)과 승인 대기(pending)로만 생성 가능
+      allow create: if request.auth != null && request.auth.uid == userId
+        && (
+          isTeacherEmail()
+          || (request.resource.data.role == 'student' && request.resource.data.status == 'pending')
+        );
 
-      // 교사는 학생 승인 등 모든 사용자 정보를 수정할 수 있고, 본인은 자기 문서 수정 가능
-      allow update: if isTeacher() || (request.auth != null && request.auth.uid == userId);
+      // [해킹 방어 2] 교사는 학생의 승인/역할을 변경할 수 있지만,
+      // 일반 학생은 콘솔에서 본인의 role(역할)이나 status(승인상태)를 절대로 조작할 수 없습니다.
+      allow update: if isTeacher() || (
+        request.auth != null
+        && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status'])
+      );
+
+      // 사용자 삭제는 교사만 가능합니다
+      allow delete: if isTeacher();
     }
 
-    // 메모 (memos 컬렉션)
+    // ===================================================
+    // 담벼락 메모 (memos 컬렉션)
+    // ===================================================
     match /memos/{memoId} {
-      // 누구나 메모를 읽을 수 있습니다
+      // 모든 사용자가 담벼락을 볼 수 있습니다
       allow read: if true;
 
-      // 생성: 교사이거나 승인된 학생만 자기 UID로 생성 가능
+      // 교사이거나 승인을 받은 학생만 본인의 UID로 메모를 쓸 수 있습니다
       allow create: if (isTeacher() || isApprovedStudent())
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.text is string
@@ -55,7 +71,8 @@ service cloud.firestore {
           || request.resource.data.createdAt is int
         );
 
-      // 수정 및 삭제: 오직 교사(teacher)만 가능
+      // [해킹 방어 3] 메모 수정 및 삭제는 오직 교사(teacher)만 가능합니다.
+      // 학생이 콘솔에서 deleteDoc 등을 호출해도 서버 차원에서 원천 차단됩니다.
       allow update, delete: if isTeacher();
     }
 
