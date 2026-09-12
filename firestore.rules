@@ -5,7 +5,8 @@ service cloud.firestore {
     match /memos/{memoId} {
       allow read: if true;
 
-      allow create: if request.resource.data.keys().hasOnly(['text', 'createdAt'])
+      // 메모를 등록할 때 필수 필드(text, createdAt) 및 글자 수 검사, 선택 필드(userName, uid) 허용
+      allow create: if request.resource.data.keys().hasOnly(['text', 'createdAt', 'userName', 'uid'])
         && request.resource.data.text is string
         && request.resource.data.text.size() >= 5
         && request.resource.data.text.size() <= 50

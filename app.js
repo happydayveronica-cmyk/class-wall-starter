@@ -77,10 +77,17 @@ async function addMemo(text) {
     throw new Error("메모는 5글자 이상이어야 합니다.");
   }
 
-  await addDoc(memosCollection, {
+  const memoData = {
     text: text,
-    createdAt: Date.now()
-  });
+    createdAt: Date.now(),
+    userName: currentUser ? (currentUser.displayName || "익명") : "익명"
+  };
+
+  if (currentUser && currentUser.uid) {
+    memoData.uid = currentUser.uid;
+  }
+
+  await addDoc(memosCollection, memoData);
 }
 
 // 메모를 지웁니다.
@@ -180,6 +187,16 @@ function makeMemo(memo) {
     }
   });
   div.appendChild(del);
+
+  // 사용자 이름 표시 (메모 내용 위)
+  const authorDiv = document.createElement("div");
+  authorDiv.className = "author";
+  authorDiv.textContent = memo.userName || "익명";
+  authorDiv.style.fontSize = "12px";
+  authorDiv.style.fontWeight = "bold";
+  authorDiv.style.color = "#555";
+  authorDiv.style.marginBottom = "6px";
+  div.appendChild(authorDiv);
 
   const span = document.createElement("span");
   span.textContent = memo.text;
