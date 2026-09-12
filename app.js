@@ -62,6 +62,11 @@ async function loadMemos() {
 // 메모를 새로 씁니다.
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
 async function addMemo(text) {
+  // 5글자 이상일 때만 저장되도록 확인합니다.
+  if (text.length < 5) {
+    throw new Error("메모는 5글자 이상이어야 합니다.");
+  }
+
   await addDoc(memosCollection, {
     text: text,
     createdAt: Date.now()
@@ -133,6 +138,12 @@ input.addEventListener("keydown", async function (e) {
 
     const text = input.value.trim();
     if (text === "") return;
+
+    // 5글자 이상 입력 확인
+    if (text.length < 5) {
+      alert("메모를 5글자 이상 입력해 주세요.");
+      return;
+    }
 
     try {
       await addMemo(text);
