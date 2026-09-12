@@ -9,6 +9,13 @@ import {
   orderBy,
   query
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA7aenT69jFp56LZwtAGOkqYew3VgVCB9E",
@@ -22,6 +29,9 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 const memosCollection = collection(db, "memos");
+const auth = getAuth(firebaseApp);
+const googleProvider = new GoogleAuthProvider();
+let currentUser = null;
 
 // ===================================================
 // 우리 반 담벼락 - 시작점
@@ -78,6 +88,60 @@ async function addMemo(text) {
 async function deleteMemo(id) {
   await deleteDoc(doc(db, "memos", id));
 }
+
+
+// ===================================================
+// 로그인 및 사용자 영역
+// ===================================================
+
+const userArea = document.getElementById("userArea");
+
+// 사용자 영역을 그립니다 (로그인/로그아웃 버튼)
+function renderUserArea() {
+  if (!userArea) return;
+  userArea.innerHTML = "";
+
+  if (currentUser) {
+    // 로그인 상태: 환영 문구와 로그아웃 버튼
+    const greeting = document.createElement("span");
+    greeting.textContent = (currentUser.displayName || "사용자") + "님 환영합니다! ";
+    greeting.style.marginRight = "8px";
+
+    const logoutButton = document.createElement("button");
+    logoutButton.textContent = "로그아웃";
+    logoutButton.onclick = async function () {
+      try {
+        await signOut(auth);
+      } catch (error) {
+        console.error("로그아웃 실패:", error);
+        alert("로그아웃 중 오류가 발생했습니다.");
+      }
+    };
+
+    userArea.appendChild(greeting);
+    userArea.appendChild(logoutButton);
+  } else {
+    // 로그아웃 상태: Google 로그인 버튼
+    const loginButton = document.createElement("button");
+    loginButton.textContent = "Google 로그인";
+    loginButton.onclick = async function () {
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (error) {
+        console.error("로그인 실패:", error);
+        alert("로그인에 실패했습니다. 팝업 차단 여부를 확인해 주세요.");
+      }
+    };
+
+    userArea.appendChild(loginButton);
+  }
+}
+
+// 로그인 상태 변경 감지
+onAuthStateChanged(auth, function (user) {
+  currentUser = user;
+  renderUserArea();
+});
 
 
 // ===================================================
@@ -158,5 +222,6 @@ input.addEventListener("keydown", async function (e) {
 
 
 // 첫 화면 그리기
+renderUserArea();
 render();
 input.focus();
