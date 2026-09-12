@@ -109,10 +109,10 @@ function renderUserArea() {
   userArea.innerHTML = "";
 
   if (currentUser) {
-    // 로그인 상태: 환영 문구와 로그아웃 버튼
-    const greeting = document.createElement("span");
-    greeting.textContent = (currentUser.displayName || "사용자") + "님 환영합니다! ";
-    greeting.style.marginRight = "8px";
+    // 로그인 상태: 사용자 뱃지와 로그아웃 버튼
+    const badge = document.createElement("span");
+    badge.className = "user-badge";
+    badge.textContent = (currentUser.displayName || "선생님") + "님";
 
     const logoutButton = document.createElement("button");
     logoutButton.textContent = "로그아웃";
@@ -125,7 +125,7 @@ function renderUserArea() {
       }
     };
 
-    userArea.appendChild(greeting);
+    userArea.appendChild(badge);
     userArea.appendChild(logoutButton);
   } else {
     // 로그아웃 상태: Google 로그인 버튼
@@ -175,8 +175,26 @@ function makeMemo(memo) {
   const div = document.createElement("div");
   div.className = "memo";
 
+  // 상단 헤더: 작성자 및 삭제 버튼
+  const header = document.createElement("div");
+  header.className = "memo-header";
+
+  const authorDiv = document.createElement("div");
+  authorDiv.className = "author";
+
+  const dot = document.createElement("span");
+  dot.className = "author-dot";
+  authorDiv.appendChild(dot);
+
+  const name = document.createElement("span");
+  name.textContent = memo.userName || "익명";
+  authorDiv.appendChild(name);
+  header.appendChild(authorDiv);
+
   const del = document.createElement("button");
+  del.className = "del-btn";
   del.textContent = "×";
+  del.title = "삭제";
   del.addEventListener("click", async function () {
     try {
       await deleteMemo(memo.id);
@@ -186,19 +204,12 @@ function makeMemo(memo) {
       alert("메모를 지우지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   });
-  div.appendChild(del);
+  header.appendChild(del);
+  div.appendChild(header);
 
-  // 사용자 이름 표시 (메모 내용 위)
-  const authorDiv = document.createElement("div");
-  authorDiv.className = "author";
-  authorDiv.textContent = memo.userName || "익명";
-  authorDiv.style.fontSize = "12px";
-  authorDiv.style.fontWeight = "bold";
-  authorDiv.style.color = "#555";
-  authorDiv.style.marginBottom = "6px";
-  div.appendChild(authorDiv);
-
+  // 메모 본문
   const span = document.createElement("span");
+  span.className = "memo-text";
   span.textContent = memo.text;
   div.appendChild(span);
 
