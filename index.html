@@ -314,6 +314,46 @@
       white-space: pre-wrap;
       flex-grow: 1;
     }
+
+    .memo-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 14px;
+    }
+
+    .ai-comment-btn {
+      padding: 7px 11px;
+      border: 1px solid #b7d5ff;
+      border-radius: 8px;
+      background: #f1f7ff;
+      color: #1b64da;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .ai-comment-btn:hover { background: #e8f3ff; }
+    .ai-comment-btn:disabled { cursor: wait; opacity: 0.65; }
+
+    .ai-comment {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-left: 3px solid #3182f6;
+      border-radius: 4px 9px 9px 4px;
+      background: #f5f9ff;
+      color: #334155;
+      font-size: 13.5px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .ai-comment strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #1b64da;
+      font-size: 12px;
+    }
     /* 담벼락 아래에서 함께 즐기는 분필 피하기 게임 */
     .game-section { margin-top: 48px; padding-top: 32px; border-top: 1px solid #e5e8eb; }
     .game-card { overflow: hidden; background: #fff; border: 1px solid #d8dee5; border-radius: 18px; box-shadow: 0 8px 24px rgba(25, 31, 40, 0.08); }

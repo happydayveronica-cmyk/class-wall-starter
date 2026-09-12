@@ -17,7 +17,8 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  getIdToken
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -433,6 +434,66 @@ function makeMemo(memo) {
   span.className = "memo-text";
   span.textContent = memo.text;
   div.appendChild(span);
+
+  // AI 코멘트가 있으면 모든 사용자가 게시물 아래에서 볼 수 있습니다.
+  if (memo.aiComment) {
+    const comment = document.createElement("div");
+    comment.className = "ai-comment";
+
+    const commentLabel = document.createElement("strong");
+    commentLabel.textContent = "AI 선생님 코멘트";
+    comment.appendChild(commentLabel);
+
+    const commentText = document.createElement("span");
+    commentText.textContent = memo.aiComment;
+    comment.appendChild(commentText);
+    div.appendChild(comment);
+  }
+
+  // 교사만 AI 코멘트를 만들거나 새로 작성할 수 있습니다.
+  if (currentRole === "teacher") {
+    const actions = document.createElement("div");
+    actions.className = "memo-actions";
+
+    const aiButton = document.createElement("button");
+    aiButton.className = "ai-comment-btn";
+    aiButton.textContent = memo.aiComment ? "AI 코멘트 다시 받기" : "AI 코멘트 받기";
+    aiButton.addEventListener("click", async function () {
+      aiButton.disabled = true;
+      aiButton.textContent = "코멘트 작성 중…";
+
+      try {
+        const token = await getIdToken(currentUser);
+        const response = await fetch("/api/ai-comment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
+          body: JSON.stringify({ memoText: memo.text })
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "AI 코멘트를 만들지 못했습니다.");
+        }
+
+        await updateDoc(doc(db, "memos", memo.id), {
+          aiComment: data.comment,
+          aiCommentedAt: Date.now()
+        });
+        await render();
+      } catch (error) {
+        console.error("AI 코멘트 생성 실패:", error);
+        alert(error.message || "AI 코멘트를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        aiButton.disabled = false;
+        aiButton.textContent = memo.aiComment ? "AI 코멘트 다시 받기" : "AI 코멘트 받기";
+      }
+    });
+
+    actions.appendChild(aiButton);
+    div.appendChild(actions);
+  }
 
   return div;
 }
